@@ -10,9 +10,10 @@ import IPython
 import time
 import importlib
 import io
-import cute; importlib.reload(cute); # force-reload custom package(s)
+#import cute; importlib.reload(cute); # force-reload custom package(s)
 from matplotlib.colors import LogNorm
 import matplotlib.gridspec as gridspec
+from itertools import compress
 
 def Load_Dataset(filename:str): 
     """ Read and load RNA-Seq gene expression data in a CSV format, and return a numpy ndarray of data having fields with different datatypes and can be accessed with their name"""
@@ -145,7 +146,14 @@ def exprs(gList:list, condition:str , data, subset:bool):
     return timePoints , exprsValues 
 
 
- 
+def scaleGeneExpression(Xgt):
+    """Scales gene expression so that each gene (assumed to be rows) has maximum expression of one over all samples/conditons (assumed to tbe columns)"""
+
+    normExpr = np.zeros(Xgt.shape)
+    for j in range(Xgt.shape[0]):
+        normExpr[j,:] = Xgt[j,:]/np.max(Xgt[j,:])
+
+    return normExpr
 
 def normalizedExprs(exprsValues):
     """Returns normalized expression values as a numpy ndarray for a given list of genes with the condition.
@@ -161,9 +169,6 @@ def normalizedExprs(exprsValues):
         
     return  normalizedExprs
 
-
-
-
 def Normalized(gcsfExpr , il3Expr):
     '''Returns normalized expressions as a tuple over both conditions. 
          Input variables should be numpy ndarrays'''
@@ -173,32 +178,6 @@ def Normalized(gcsfExpr , il3Expr):
     normcombined = normalizedExprs(combinedExpr)
     
     return normcombined[0:numtimepoints,:] , normcombined[numtimepoints:,:]
-
-
-# def Normalized(gcsfExpr , il3Expr):
-#     '''Returns normalized expressions as a tuple over both conditions. 
-#          Input variables should be numpy ndarrays'''
-    
-#     numgenes = gcsfExpr.shape[1]
-#     normalizedExprsGCSF = np.zeros(gcsfExpr.shape)
-#     normalizedExprsIL3 = np.zeros(il3Expr.shape)
-    
-    
-#     for i in range(0,numgenes):
-        
-#         maxGCSF = max(gcsfExpr[:,i])
-#         maxIL3 = max(il3Expr[:,i])
-#         maxBoth = max(maxGCSF , maxIL3)
-#         maxBoth1 = max(np.concatenate((il3Expr[:,i], gcsfExpr[:,i]), 0))
-#         #print(maxBoth1 - maxBoth)               
-#         normalizedExprsGCSF[:,i] = gcsfExpr[:,i]/maxBoth
-#         normalizedExprsIL3[:,i] = il3Expr[:,i]/maxBoth
-#         #print(maxGCSF , maxIL3 , maxBoth ) 
-        
-#     return normalizedExprsGCSF , normalizedExprsIL3
-    
-    
-    
     
 def HeatMap(timePoints , exprsValues , geneNameList):
     """ Plotting heat map of genes for a particular condition """
@@ -336,38 +315,27 @@ def X_outputs(k , tol , X , normalizedBoth ):
     return X, Xapprx_both,  h_both
 
 
+def filter_low_expressing_genes(Xgt, geneNames, threshold):
+    """ Take X matrix, the list of gene names, and a threshold value as
+    inputs. Filter out genes whose maximum expression across all samples is
+    lower than the threshold value. Assumes that rows are genes and columns
+    are samples. The outputs are the filtered X matrix and filtered gene
+    names """
 
+    # Creating a boolean vector for genes that pass filter
+    filt = np.max(Xgt, 1) > threshold
 
-def filter_low_expressing_genes(Xgt_not_normalized, Wgm, gene_names_list, Threshold):
-    """ Take X(not normalized) matrix, W matrix , list of gene names and a threshold value as inputs to filter out genes which have low expressions than the threshold value. The outputs are, filtered X matrix, filtered W matrix and filtered gene names """
+    # Filter Xgt matrix 
+    filtXgt = Xgt[filt, :]
 
-    #Obtaining the maximum expression for each gene over timepoints and make a numpy ndarray to include them
-    Xgt_not_normalized_max_exprs = np.zeros((Xgt_not_normalized.shape[0],1))
-    gene_counter = 0
-    for row in Xgt_not_normalized:
-        max_exprs = np.max(row)
-        Xgt_not_normalized_max_exprs[gene_counter] = max_exprs
-        gene_counter += 1
-
-    #Creating a boolean vector, "Xgt_max_bool", which will only be TRUE, where the maximum expression for each gene is greater than the defined threshold
-    Xgt_max_bool = Xgt_not_normalized_max_exprs > Threshold
-
-    #Filter Xgt matrix removing low expressed genes with compared to the defined threshold
-    filtered_Xgt_not_normalized = Xgt_not_normalized[Xgt_max_bool[:,0], :]
-
-    #Filter Wgm matrix removing low expressed genes with compared to the defined threshold
-    filtered_Wgm = Wgm[Xgt_max_bool[:,0] , :]
-    
     #Filter gene names having expresion greater than the threshold value
-    gene_names = np.array(gene_names_list).reshape(Xgt_not_normalized_max_exprs.shape)
-    filtered_gene_names = gene_names[Xgt_max_bool]
-    filtered_gene_names = filtered_gene_names.tolist()
+    #geneNamesArr = np.array(geneNames).reshape(filt.shape)
+    #filtGeneNamesArr = geneNamesArr[filt]
+    #filtGeneNames = filtGeneNamesArr.tolist()
+    filtGeneNames = list(compress(geneNames, filt))
 
-    return filtered_Xgt_not_normalized, filtered_Wgm, filtered_gene_names
+    return filtXgt, filtGeneNames
 
-
-
-    
 def plot_for_one_gene_in_a_list(gene_index, gene_name, gcsf_timepoints_of_gene, il3_timepoints_of_gene, gcsf_exprs_of_gene, il3_exprs_of_gene):
     """ Returns plots for gene expression over timepoints for both condition for one gene at a time. Inputs: index of the gene in the gene list, rows corresponding to gcsf and il3 timepoints and expressions for that particular gene """
 
@@ -726,7 +694,7 @@ def NMF_nested_sort(Xgt, Wgm, Hmt, TotGeneNameList):
     X_gp_t = Xgt[g_gp,:]                 # arrange the genes in Xgt in the desired order
     
     W_gp_mp = Wgm[g_gp,:][:,m_mp]        # arrange g and m in Wgm   (this is ok)
-    gene_names = TotGeneNameList[g_gp]   # "gene_names" is sorted gene names according to the indices that sort weights of dominant metagene for all genes
+    gene_names = [TotGeneNameList[j] for j in g_gp]   # "gene_names" is sorted gene names according to the indices that sort weights of dominant metagene for all genes
     
     return X_gp_t, W_gp_mp, H_mp_t, g_gp, gene_names
 

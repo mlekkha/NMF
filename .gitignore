@@ -1,0 +1,9 @@
+*.Rproj
+.Rproj.user
+.Rhistory
+*.RData
+.Ruserdata
+*.nb.html
+*.DS_Store
+__pycache__
+.ipynb_checkpoints

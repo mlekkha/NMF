@@ -1,0 +1,12 @@
+name: NMF
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - ipykernel
+  - matplotlib
+  - scikit-learn
+  - numpy
+  - jupyterlab  
+variables:
+  PYTHONPATH: 
