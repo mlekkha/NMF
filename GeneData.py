@@ -57,8 +57,26 @@ def Load_Dataset(filename:str):
     
     
     return data_typed
+
+def ReadTusiGEOCSV(filename:str) -> np.array:
+    '''Read Tusi et al. data from the CSV downloaded from GEO. Skip header and the first 5 metadata columns.'''
     
- 
+    with open(filename, newline='') as csvfile:
+        tusi_data = []
+        reader = csv.reader(csvfile) #reader object iterates through the csv file  
+    
+        # Skip header
+        next(reader)
+    
+        for row in reader:
+            # Append rows, skipping the first 5 metadata columns
+            tusi_data.append(row[5:])          
+    
+        tusi_data = np.array(tusi_data)
+        tusi_data = tusi_data.astype(float) 
+
+    # Return transposed array putting genes on rows and cell on columns
+    return np.array(tusi_data.T)   
 
 def ReadCSV(filename:str):
     '''Read and load data in a CSV file as a numpy ndarray'''
@@ -151,7 +169,9 @@ def scaleGeneExpression(Xgt):
 
     normExpr = np.zeros(Xgt.shape)
     for j in range(Xgt.shape[0]):
-        normExpr[j,:] = Xgt[j,:]/np.max(Xgt[j,:])
+        maxExpr = np.max(Xgt[j,:])
+        if maxExpr > 0:
+            normExpr[j,:] = Xgt[j,:]/maxExpr
 
     return normExpr
 
